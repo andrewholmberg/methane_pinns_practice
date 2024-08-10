@@ -49,7 +49,7 @@ function updatePlot(src, event, X1, X2, X3, U, h, ax, sliderLabel,fig)
     zlim(ax, [min(U(:)), max(U(:))]);
     % Update the slider label
     set(sliderLabel, 'String', ['Time: ',num2str(un(val)) ]);
-    saveas(fig,['D:\andyh\Documents\Projects\mines\methane_project\pinns_practice',num2str(val),'.jpg'])
+    saveas(fig,['D:\andyh\Documents\Projects\mines\methane_project\pinns_practice\visualization\20240810_methane_gif\images\figure',num2str(val),'.jpg'])
     drawnow;
 end
 
