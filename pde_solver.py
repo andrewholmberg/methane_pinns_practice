@@ -170,9 +170,12 @@ class PINN(nn.Module):
         for n in self.input_names:
             partial_derivatives[n] = self.physics_points[n]
         #important that pde order dict is sorted chronologically. I believe it is...
+
         for el in self.pde_order_dict:
             partial_derivatives[el[2]] = torch.autograd.grad(outputs=partial_derivatives[el[0]], inputs= partial_derivatives[el[1]], grad_outputs=torch.ones_like(partial_derivatives[el[0]]), create_graph=True)[0]
         s = 0
+
+        
         for i in range(len(self.physics_conditions)):
             parameters = [self.order_lambda_variable(el) for el in list(inspect.signature(self.physics_conditions[i]).parameters)]
             tensor = torch.transpose(torch.cat([partial_derivatives[parameters[j]].view(-1,1) for j in range(len(parameters))], dim=1),0,1)
