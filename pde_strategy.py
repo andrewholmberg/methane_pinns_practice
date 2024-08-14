@@ -100,5 +100,3 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
     print(d)
     x = list(set(uls))
     return x, d
-
-pde_strategy(['ux1','ux2','ux2x2','ux1x1','ux3x3x3'],3,3)
