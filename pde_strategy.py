@@ -106,6 +106,7 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
     print(G.out_edges('ux1'))
     uls = []
     m =[]
+    d = {}
     for u, v, data in G.edges(data=True):
         if flow_dict[u][v] !=0:
             uls.append(u.replace('s','u'))
@@ -122,6 +123,12 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
                     i+= len(rep)
                 # print((u.replace('s','u'),str1,v))
                 m.append((u.replace('s','u'),str1,v))
-
+                temp = u.replace('s','u')
+                if not temp in d.keys():
+                    d[temp] = [str1]
+                else:  d[temp].append(str1)
+    print(d)
     x = list(set(uls))
-    return x, m
+    return x, d
+
+pde_strategy(['ux1','ux2','ux2x2','ux1x1','ux3x3x3'],3,3)

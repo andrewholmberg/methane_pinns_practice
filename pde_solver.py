@@ -31,8 +31,7 @@ class PINN(nn.Module):
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i + 1]))
 
-    def __call__(self, tensor_list):
-        inputs = torch.cat(tensor_list, dim=1)
+    def __call__(self, inputs):
         for i, layer in enumerate(self.layers):
             inputs = torch.tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
         return inputs
@@ -164,15 +163,23 @@ class PINN(nn.Module):
     
 
     def physics_loss(self):
-        inputs = [self.physics_points[self.input_names[i]] for i in range(len(self.input_names))]
+        # print(np.sort(self.pde_order_dict[el]))
+        # print(self.input_names,'\n\n')
+        inputs = torch.concat([self.physics_points[self.input_names[i]] for i in range(len(np.sort(self.input_names)))],dim=1)
         partial_derivatives = {}
         partial_derivatives['u'] = self(inputs)
         for n in self.input_names:
             partial_derivatives[n] = self.physics_points[n]
         #important that pde order dict is sorted chronologically. I believe it is...
 
-        for el in self.pde_order_dict:
-            partial_derivatives[el[2]] = torch.autograd.grad(outputs=partial_derivatives[el[0]], inputs= partial_derivatives[el[1]], grad_outputs=torch.ones_like(partial_derivatives[el[0]]), create_graph=True)[0]
+        for el in self.pde_order_dict.keys():
+            # inputs_here = torch.concat(inputs,dim=1)
+            tensor = torch.autograd.grad(outputs=partial_derivatives[el], inputs = inputs, grad_outputs=torch.ones_like(partial_derivatives[el]), create_graph=True)[0]
+            # print(tensor)
+            for val in np.sort(self.pde_order_dict[el]):
+                i = int(val[-1])-1
+                partial_derivatives[f'{el}{val}'] = tensor[:,i]
+                i+=1
         s = 0
 
         
@@ -185,7 +192,7 @@ class PINN(nn.Module):
 
 
     def boundary_loss(self):
-        u_pred =  self([self.boundary_points[self.input_names[i]] for i in range(len(self.input_names))])
+        u_pred =  self(torch.concat([self.boundary_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.boundary_points['u']
         return torch.mean(torch.square(u_pred-u) * torch.tensor(self.boundary_point_weights))
         #do i enforce that 'u' is always in boundary points?
