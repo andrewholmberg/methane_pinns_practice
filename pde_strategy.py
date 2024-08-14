@@ -12,47 +12,25 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
         combinations_list += list(itertools.combinations_with_replacement(numbers,i))
     u = [''.join(['x'+ str(combinations_list[i][j]) for j in range(len(combinations_list[i]))]) for i in range(len(combinations_list))]
 
+
     def adjust_weights(G, flow_dict, base_weight):
         """ Adjust weights based on current flow. """
-        # for u, v in G.edges():
-        #     current_flow = flow_dict[u][v]
-        #     # Adjust the weight: if there is flow, divide the base weight by the flow
-        #     G[u][v]['weight'] = base_weight[(u, v)] / current_flow * 1000 if current_flow != 0 else base_weight[(u, v)] * 1000
-        
-        for node in G.nodes():
-            inflow, outflow = 0, 0
-
-            for u, v in G.in_edges(node):
-                inflow += flow_dict[u][v]
-    
-            # Calculate outflow (sum of all flow out of the node)
-            out = 0
-            for u, v in G.out_edges(node):
-                outflow += flow_dict[u][v]
-                if v == 't':
-                    out = flow_dict[u][v]
-            
-            G.nodes[node]['weight'] = base_weight[node]  if outflow - out > 0 else 0 #  base_weight[node] * 1000
-
+        for u, v in G.edges():
+            current_flow = flow_dict[u][v]
+            # Adjust the weight: if there is flow, divide the base weight by the flow
+            G[u][v]['weight'] = base_weight[(u, v)] / current_flow * 1000 if current_flow != 0 else base_weight[(u, v)] * 1000
 
     def calculate_total_cost(G, flow_dict):
         """ Calculate the total cost of the current flow. """
         total_cost = 0
-        for node in G.nodes():
-            out=0
-            inflow, outflow = 0, 0
-            for u, v in G.out_edges(node):
-                outflow += flow_dict[u][v]
-                if v == 't':
-                    out = flow_dict[u][v]
-            
-            if outflow - out > 0:
-                total_cost += G.nodes[node]['weight']
+        for u in flow_dict:
+            for v in flow_dict[u]:
+                if flow_dict[u][v] > 0:
+                    total_cost += G[u][v]['weight']
         return total_cost
 
-    def min_cost_flow_with_adjustment(G, source, sink, max_iter=200, tolerance=1e-4):
-
-        base_weight = {node: G.nodes[node]['weight'] for node in G.nodes()}
+    def min_cost_flow_with_adjustment(G, source, sink, max_iter=20, tolerance=1e-4):
+        base_weight = {edge: G[edge[0]][edge[1]]['weight'] for edge in G.edges()}
         previous_total_cost = float('inf')
 
         for i in range(max_iter):  # Iterate up to max_iter times
@@ -62,7 +40,7 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
             # Calculate the current total cost
             current_total_cost = calculate_total_cost(G, flow_dict)
             # Check for convergence
-            if abs(previous_total_cost - current_total_cost) < tolerance and i > 100:
+            if abs(previous_total_cost - current_total_cost) < tolerance:
                 break
             # Adjust the weights based on the flow
             adjust_weights(G, flow_dict, base_weight)
@@ -85,25 +63,17 @@ def pde_strategy(variables:list, input_dim:int, dim:int):
                     if list1[l] in list2:
                         list2.remove(list1[l])
                 if len(list2) == 1:
-                    G.add_edge('s' if i == 0 else 'u'+''.join(['x'+str(lower_dim[k][l]) for l in range(len(lower_dim[k]))]), 'u'+''.join(['x'+str(higher_dim[j][l]) for l in range(len(higher_dim[j]))]), capacity=1000, weight=0)
+                    # print('s' if i == 0 else 'u'+ ''.join(['x'+str(lower_dim[k][l]) for l in range(len(lower_dim[k]))]), 'u'+''.join(['x'+str(higher_dim[j][l]) for l in range(len(higher_dim[j]))]))
+                    G.add_edge('s' if i == 0 else 'u'+''.join(['x'+str(lower_dim[k][l]) for l in range(len(lower_dim[k]))]), 'u'+''.join(['x'+str(higher_dim[j][l]) for l in range(len(higher_dim[j]))]), capacity=1000, weight=1000)
 
     #add important edges
-    for node in G.nodes:
-        G.nodes[node]['weight'] = 1000
-
-
     for var in variables:
         G.add_edge(var,'t',capacity=1, weight=0)
 
     # Add node demands (negative values for supply, positive for demand)
     G.nodes['t']['demand'] = len(variables)
-    G.nodes['t']['weight'] = 0
-
     G.nodes['s']['demand'] = -1*len(variables)
-    G.nodes['s']['weight'] = 1000
     flow_dict = min_cost_flow_with_adjustment(G, 's', 't')
-    print(calculate_total_cost(G,flow_dict))
-    print(G.out_edges('ux1'))
     uls = []
     m =[]
     d = {}
