@@ -11,7 +11,7 @@ import numpy as np
 
 
 class PINN(nn.Module):
-    def __init__(self, layers, physics_loss, boundary_loss):
+    def __init__(self, layers, physics_loss, boundary_loss, data_loss = None):
         self.input_dim = layers[0]
         self.input_names = [f'x{i+1}' for i in range(self.input_dim)]
         self.check_physics_loss(physics_loss)
@@ -23,6 +23,13 @@ class PINN(nn.Module):
         self.check_boundary_loss(boundary_loss)
         self.boundary_points = boundary_loss['points']
         self.boundary_point_weights = boundary_loss['point_weights']
+        self.use_data_loss = False
+        if(data_loss != None):
+            self.use_data_loss = True
+            self.check_boundary_loss(data_loss)
+            self.data_points = data_loss['points']
+            self.data_point_weights = data_loss['point_weights']
+
         self.format_tensors()
         #unique pde's that will need to be calculated
         self.unique_pdes, self.pde_order_dict = self.set_up_pdes()
@@ -159,8 +166,12 @@ class PINN(nn.Module):
 
         
     def total_loss(self):
-        return self.physics_loss() + self.boundary_loss()
+        return self.physics_loss() + self.boundary_loss() + (self.data_loss() if self.use_data_loss == True else 0)
     
+    def data_loss(self):
+        u_pred =  self(torch.concat([self.data_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
+        u = self.data_points['u']
+        return torch.mean(torch.square(u_pred-u) * torch.tensor(self.data_points))
 
     def physics_loss(self):
         # print(np.sort(self.pde_order_dict[el]))
