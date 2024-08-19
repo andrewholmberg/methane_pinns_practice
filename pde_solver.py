@@ -11,6 +11,13 @@ import numpy as np
 
 
 class PINN(nn.Module):
+    '''
+    Initialize PINN
+    @param layers - list of int - size of input, hidden layers, output. ex: [3,40,40,40,1]
+    @param physics_loss - contains weights, points, and physics equation - see documentation for requirements/syntax
+    @param boundary_loss - contains weights, points for boundary / initial condition - see documentation for requirements/syntax
+    @param data_loss - for inverse problem. Trains PINN to observed data.
+    '''
     def __init__(self, layers, physics_loss, boundary_loss, data_loss = None):
         self.input_dim = layers[0]
         self.input_names = [f'x{i+1}' for i in range(self.input_dim)]
@@ -38,16 +45,27 @@ class PINN(nn.Module):
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i + 1]))
 
+    '''
+    Evaluate PINN for given inputs
+    @param inputs 2d tensor to evaluate.
+    '''
     def __call__(self, inputs):
         for i, layer in enumerate(self.layers):
             inputs = torch.tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
         return inputs
     
+    '''
+    helper function - TO COMPLETE LATER
+    '''
     def order_lambda_variable(self,string):
         x= ['u'] + [string[2*i+1:2*i+3] for i in range(len(string)//2)] if len(string) > 2 else [string]
         x.sort()
         return "".join(x)
-    
+    '''
+    set up optimal pde differentiation strategy.
+    @return unique_pdes list of each pde to be calculated
+    @return pde_map dict of string, list - telling which pdes to be calculated from which variable.
+    '''
     def set_up_pdes(self):
         pdes = {'u'}
         for f in self.physics_conditions:
@@ -59,7 +77,10 @@ class PINN(nn.Module):
         return unique_pdes, pde_map
 
 
-
+    '''
+    list of assertions for boundary loss input. Make sure datatypes and sizes of tensors are valid.
+    @param boundary loss - same as in init.
+    '''
     def check_boundary_loss(self, boundary_loss):
         assert "point_weights" in boundary_loss.keys() and "points" in boundary_loss.keys()
         points = boundary_loss['points']
@@ -86,7 +107,10 @@ class PINN(nn.Module):
         for el in points.keys():
             self.check_variable_taxonomy(el)
 
-
+    '''
+    list of assertions for physics loss input. Make sure data types and sizes of tensors are valid.
+    @param physics loss - same as in init.
+    '''
     def check_physics_loss(self,physics_loss):
         assert "conditions" in physics_loss.keys() and "condition_weights" in physics_loss.keys() and "points" in physics_loss.keys() and "point_weights" in physics_loss.keys()
         assert len(physics_loss['conditions']) == len(physics_loss['condition_weights'])
@@ -136,6 +160,12 @@ class PINN(nn.Module):
             self.check_variable_taxonomy(el)
 
     #assert variable is named properly.
+    '''
+    Assert variable is named properly. examples of valid variables: 'x1', 'x2', 'ux1x2', 'u', 'ux1'.
+    This is essential for interpreting physics loss function and input loss point tensors found in boundary loss, 
+        physics loss, and data loss.
+    @param: var the variable to check for taxonomy. ex: 'ux1'. !Note! this cannot be a list of strings
+    '''
     def check_variable_taxonomy(self,var:str):
         #var is not an empty string.
         assert len(var) > 0
@@ -154,7 +184,12 @@ class PINN(nn.Module):
             #all numbers after x are between 1 and input_dim
             assert var[i+add+1].isdigit() and int(var[i+add+1]) <= self.input_dim and int(var[i+add+1]) > 0
 
+    '''
+    Make sure input tensors are set up correctly.
+    1) set requires_grad = True
+    2) make sure tensors are 2d and of type float
 
+    '''
     def format_tensors(self):
         for k in self.physics_points.keys():
             self.physics_points[k].requires_grad = True
@@ -164,50 +199,83 @@ class PINN(nn.Module):
             self.boundary_points[k].requires_grad = True
             self.boundary_points[k] = self.boundary_points[k].view(-1,1).float()
 
-        
+    '''
+    Compute total loss.
+    Call physics loss, boundary loss, and data loss if applicable.
+    @return total loss.
+    ''' 
     def total_loss(self):
         return self.physics_loss() + self.boundary_loss() + (self.data_loss() if self.use_data_loss == True else 0)
     
+    '''
+    Compute data loss.
+    This is practically identical to boundary_loss.
+    @return data loss.
+    ''' 
     def data_loss(self):
         u_pred =  self(torch.concat([self.data_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.data_points['u']
         return torch.mean(torch.square(u_pred-u) * torch.tensor(self.data_points))
 
+    '''
+    Compute physics loss.
+    This is practically identical to boundary_loss.
+    @return data loss.
+    ''' 
     def physics_loss(self):
-        # print(np.sort(self.pde_order_dict[el]))
-        # print(self.input_names,'\n\n')
+        #concatenate input tensors to compute physics values
         inputs = torch.concat([self.physics_points[self.input_names[i]] for i in range(len(np.sort(self.input_names)))],dim=1)
+        #partial derivatives - dict of string -> tensor, to store partial derivative tensors by name.
         partial_derivatives = {}
         partial_derivatives['u'] = self(inputs)
+        #store values of x1, x2, x3, etc.
         for n in self.input_names:
             partial_derivatives[n] = self.physics_points[n]
         #important that pde order dict is sorted chronologically. I believe it is...
-
+        '''
+        iterate through the pde_order_dict, and compute derivatives based on instructions stored inside. 
+        Currently it just computes all pdes for each tensor that is derived. probably can change this to
+        improve efficiency in the future. Right now it's pretty fast, though.
+        For each element to be differentiated:
+        '''
         for el in self.pde_order_dict.keys():
-            # inputs_here = torch.concat(inputs,dim=1)
+            '''compute partial derivative'''
             tensor = torch.autograd.grad(outputs=partial_derivatives[el], inputs = inputs, grad_outputs=torch.ones_like(partial_derivatives[el]), create_graph=True)[0]
-            # print(tensor)
+
+            '''add each partial derivative that was computed to partial_derivatives dict'''
             for val in np.sort(self.pde_order_dict[el]):
                 i = int(val[-1])-1
                 partial_derivatives[f'{el}{val}'] = tensor[:,i]
                 i+=1
-        s = 0
-
-        
+        sum = 0
+        '''
+        For each physics condition specified in setup, compute PINN physics value from given physics equation.
+        By the way the user should have set up the problem, each condition is set to 0, so we use this value
+        as the loss.
+        '''
         for i in range(len(self.physics_conditions)):
             parameters = [self.order_lambda_variable(el) for el in list(inspect.signature(self.physics_conditions[i]).parameters)]
             tensor = torch.transpose(torch.cat([partial_derivatives[parameters[j]].view(-1,1) for j in range(len(parameters))], dim=1),0,1)
             x = self.physics_conditions[i](*tensor) 
-            s += torch.mean(torch.square(x) * torch.tensor(self.physics_point_weights)) * self.physics_condition_weights[i]
-        return s/len(self.physics_conditions)
+            sum += torch.mean(torch.square(x) * torch.tensor(self.physics_point_weights)) * self.physics_condition_weights[i]
+        '''return weight per number of conditions'''
+        return sum/len(self.physics_conditions)
 
-
+    '''
+    Compute boundary loss.
+    This is practically identical to boundary_loss.
+    @return data loss.
+    ''' 
     def boundary_loss(self):
         u_pred =  self(torch.concat([self.boundary_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.boundary_points['u']
         return torch.mean(torch.square(u_pred-u) * torch.tensor(self.boundary_point_weights))
         #do i enforce that 'u' is always in boundary points?
-
+    '''
+    Train the network based on total loss. user can either use this method as default, or create their own training method.
+    When using, I will probably just create my own training loop for better customization. but this is an option for 
+    basic tasks! or if user doesn't know much about training.
+    '''
     def train(self,optimizer,max_epochs = 20000, scheduler = None):
         for epoch in range(max_epochs+1):
             optimizer.zero_grad()
