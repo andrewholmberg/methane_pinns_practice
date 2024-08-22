@@ -199,6 +199,12 @@ class PINN(nn.Module):
             self.boundary_points[k].requires_grad = True
             self.boundary_points[k] = self.boundary_points[k].view(-1,1).float()
 
+        if self.use_data_loss == True:
+            # print('data loss format')
+            for k in self.data_points.keys():
+                self.data_points[k].requires_grad = True
+                self.data_points[k] = self.data_points[k].view(-1,1).float()
+
     '''
     Compute total loss.
     Call physics loss, boundary loss, and data loss if applicable.
@@ -215,7 +221,7 @@ class PINN(nn.Module):
     def data_loss(self):
         u_pred =  self(torch.concat([self.data_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.data_points['u']
-        return torch.mean(torch.square(u_pred-u) * torch.tensor(self.data_points))
+        return torch.mean(torch.square(u_pred-u) * torch.tensor(self.data_point_weights))
 
     '''
     Compute physics loss.
