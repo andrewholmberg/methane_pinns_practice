@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "methane-pinns-practice"
+version = "0.0.1"
+description = "Configuring dependencies for methane pinns"
+authors = ["Andy Holmberg <andy.p.holmberg@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+torch = "^2.4.0"
+numpy = "^2.1.0"
+networkx = "^3.3"
+scipy = "^1.14.1"
+matplotlib = "^3.9.2"
+pandas = "^2.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

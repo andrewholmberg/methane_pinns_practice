@@ -1,7 +1,7 @@
-import torch
+# import torch
+from torch import tanh, tensor, square, mean,concat, Tensor, autograd, ones_like, transpose
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms
 import inspect
 from collections.abc import Iterable
 from pde_strategy import pde_strategy # Neural Network Architecture
@@ -51,7 +51,7 @@ class PINN(nn.Module):
     '''
     def __call__(self, inputs):
         for i, layer in enumerate(self.layers):
-            inputs = torch.tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
+            inputs = tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
         return inputs
     
     '''
@@ -146,7 +146,7 @@ class PINN(nn.Module):
         assert len(points) == self.input_dim
         length = len(point_weights)
         for el in points.keys():
-            assert isinstance(points[el], torch.Tensor)
+            assert isinstance(points[el], Tensor)
             assert len(points[el]) == length
             for t in points[el] :
                 assert isinstance(t.item(), (int,float))        
@@ -219,9 +219,9 @@ class PINN(nn.Module):
     @return data loss.
     ''' 
     def data_loss(self):
-        u_pred =  self(torch.concat([self.data_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
+        u_pred =  self(concat([self.data_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.data_points['u']
-        return torch.mean(torch.square(u_pred-u) * torch.tensor(self.data_point_weights))
+        return mean(square(u_pred-u) * tensor(self.data_point_weights))
 
     '''
     Compute physics loss.
@@ -230,7 +230,7 @@ class PINN(nn.Module):
     ''' 
     def physics_loss(self):
         #concatenate input tensors to compute physics values
-        inputs = torch.concat([self.physics_points[self.input_names[i]] for i in range(len(np.sort(self.input_names)))],dim=1)
+        inputs = concat([self.physics_points[self.input_names[i]] for i in range(len(np.sort(self.input_names)))],dim=1)
         #partial derivatives - dict of string -> tensor, to store partial derivative tensors by name.
         partial_derivatives = {}
         partial_derivatives['u'] = self(inputs)
@@ -246,7 +246,7 @@ class PINN(nn.Module):
         '''
         for el in self.pde_order_dict.keys():
             '''compute partial derivative'''
-            tensor = torch.autograd.grad(outputs=partial_derivatives[el], inputs = inputs, grad_outputs=torch.ones_like(partial_derivatives[el]), create_graph=True)[0]
+            tensor = autograd.grad(outputs=partial_derivatives[el], inputs = inputs, grad_outputs=ones_like(partial_derivatives[el]), create_graph=True)[0]
 
             '''add each partial derivative that was computed to partial_derivatives dict'''
             for val in np.sort(self.pde_order_dict[el]):
@@ -261,9 +261,9 @@ class PINN(nn.Module):
         '''
         for i in range(len(self.physics_conditions)):
             parameters = [self.order_lambda_variable(el) for el in list(inspect.signature(self.physics_conditions[i]).parameters)]
-            tensor = torch.transpose(torch.cat([partial_derivatives[parameters[j]].view(-1,1) for j in range(len(parameters))], dim=1),0,1)
+            tensor = transpose(concat([partial_derivatives[parameters[j]].view(-1,1) for j in range(len(parameters))], dim=1),0,1)
             x = self.physics_conditions[i](*tensor) 
-            sum += torch.mean(torch.square(x) * torch.tensor(self.physics_point_weights)) * self.physics_condition_weights[i]
+            sum += mean(square(x) * tensor(self.physics_point_weights)) * self.physics_condition_weights[i]
         '''return weight per number of conditions'''
         return sum/len(self.physics_conditions)
 
@@ -273,9 +273,9 @@ class PINN(nn.Module):
     @return data loss.
     ''' 
     def boundary_loss(self):
-        u_pred =  self(torch.concat([self.boundary_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
+        u_pred =  self(concat([self.boundary_points[self.input_names[i]] for i in range(len(self.input_names))],dim=1))
         u = self.boundary_points['u']
-        return torch.mean(torch.square(u_pred-u) * torch.tensor(self.boundary_point_weights))
+        return mean(square(u_pred-u) * tensor(self.boundary_point_weights))
         #do i enforce that 'u' is always in boundary points?
     '''
     Train the network based on total loss. user can either use this method as default, or create their own training method.
