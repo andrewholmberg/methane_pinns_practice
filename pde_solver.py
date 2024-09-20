@@ -19,7 +19,8 @@ class PINN(nn.Module):
     @param boundary_loss - contains weights, points for boundary / initial condition - see documentation for requirements/syntax
     @param data_loss - for inverse problem. Trains PINN to observed data.
     '''
-    def __init__(self, layers, physics_loss, boundary_loss, data_loss = None,device = None):
+    def __init__(self, layers,activation, physics_loss, boundary_loss, data_loss = None,device = None):
+        assert len(layers) == len(activation)
         self.input_dim = layers[0]
         self.input_names = [f'x{i+1}' for i in range(self.input_dim)]
         self.check_physics_loss(physics_loss)
@@ -43,8 +44,10 @@ class PINN(nn.Module):
         self.unique_pdes, self.pde_order_dict = self.set_up_pdes()
         super(PINN, self).__init__()
         self.layers = nn.ModuleList()
+        activation_dict = {'relu' : nn.ReLU(), 'tanh' : nn.Tanh(), 'sigmoid' : nn.Sigmoid()}
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i + 1]))
+            self.layers.append(activation_dict[activation[i]])
 
     '''
     Evaluate PINN for given inputs
@@ -52,7 +55,8 @@ class PINN(nn.Module):
     '''
     def __call__(self, inputs):
         for i, layer in enumerate(self.layers):
-            inputs = torch.tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
+            # inputs = torch.tanh(layer(inputs)) if i < len(self.layers) - 1 else layer(inputs)
+            inputs = layer(inputs)
         return inputs
     
     '''
